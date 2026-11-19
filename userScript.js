@@ -4,7 +4,7 @@
   if (window.__tttvLoaded) return;
   window.__tttvLoaded = true;
 
-  var VERSION = '0.1.2-tizen3';
+  var VERSION = '0.1.3.1-tizen3';
   var KEY = {
     UP: 38, DOWN: 40, LEFT: 37, RIGHT: 39, OK: 13,
     BACK: 10009, ESC: 27,
@@ -16,12 +16,14 @@
 
   var STATS_KEY = 'ttv.stats';
   var stats = loadStats();
-  if (!Array.isArray(stats.errorList)) {
-    stats.errorList = [];
-  }
+
+  // Reiniciar errores en cada lanzamiento para ver solo los de la ejecución actual
   stats.launches = (stats.launches || 0) + 1;
   stats.lastLaunch = new Date().toISOString();
   stats.version = VERSION;
+  stats.jsErrors = 0;
+  stats.lastError = null;
+  stats.errorList = [];
   saveStats();
 
   function loadStats() {
@@ -36,7 +38,7 @@
   }
   function log() {
     var args = Array.prototype.slice.call(arguments);
-    args.unshift('[TikTokTV]');
+    args.unshift('[Tizen TV]');
     if (typeof console !== 'undefined' && console.log) {
       console.log.apply(console, args);
     }
@@ -349,7 +351,7 @@
     var header = 'Tizen TV ' + VERSION + ' JS Errors (' + (stats.jsErrors || 0) + ')\n';
     var bodyText = list.length > 0
       ? list.map(function (item, idx) { return (idx + 1) + '. ' + item; }).join('\n')
-      : 'Sin errores JS registrados.';
+      : 'Sin errores JS registrados en esta ejecución.';
 
     jsErrorsEl = document.createElement('pre');
     jsErrorsEl.style.cssText = 'position:fixed;top:5%;left:3%;max-width:44%;max-height:85%;overflow:auto;' +
@@ -396,7 +398,7 @@
     closeToasts();
     handleLoginModal();
     log('loaded v' + VERSION, 'launch #' + stats.launches);
-    toast('TikTok TV ready  ·  ▲▼ swipe  ·  OK play/pause', 4000);
+    toast('Tizen TV ready  ·  ▲▼ swipe  ·  OK play/pause', 4000);
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

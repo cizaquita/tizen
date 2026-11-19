@@ -1,6 +1,6 @@
 # TikTok TV (TizenBrew module)
 
-Opens TikTok's website full-screen on a Samsung Tizen TV via [TizenBrew](https://github.com/reisxd/TizenBrew) and maps the remote:
+Opens Tizen website full-screen on a Samsung Tizen TV via [TizenBrew](https://github.com/reisxd/TizenBrew) and maps the remote:
 
 | Remote | Action |
 |---|---|
@@ -13,7 +13,7 @@ Opens TikTok's website full-screen on a Samsung Tizen TV via [TizenBrew](https:/
 Also hides "get the app" banners and skips the login popup.
 
 ## Install
-TizenBrew → Archive (Module Manager) → **Add GitHub Module** → `Shazamzafar/tiktok-tizen`
+TizenBrew → Archive (Module Manager) → **Add GitHub Module** → `Cizaquita/tizen3`
 
 ## Telemetry
 Counters live in the TV's localStorage (`tttv.stats`) and never leave the TV. Press **Red** to view them.
