@@ -4,7 +4,7 @@
   if (window.__tttvLoaded) return;
   window.__tttvLoaded = true;
 
-  var VERSION = '0.1.1-tizen3';
+  var VERSION = '0.1.2-tizen3';
   var KEY = {
     UP: 38, DOWN: 40, LEFT: 37, RIGHT: 39, OK: 13,
     BACK: 10009, ESC: 27,
@@ -14,8 +14,11 @@
   };
   var SEEK_SECONDS = 5;
 
-  var STATS_KEY = 'tttv.stats2';
+  var STATS_KEY = 'ttv.stats';
   var stats = loadStats();
+  if (!Array.isArray(stats.errorList)) {
+    stats.errorList = [];
+  }
   stats.launches = (stats.launches || 0) + 1;
   stats.lastLaunch = new Date().toISOString();
   stats.version = VERSION;
@@ -39,7 +42,6 @@
     }
   }
 
-  // Selector seguro para motores antiguos de Tizen 3.0 (evita SyntaxError por selectores no soportados)
   function safeQuery(selector, root) {
     if (!selector || typeof selector !== 'string') return null;
     try {
@@ -62,17 +64,36 @@
     }
   }
 
+  function recordJsError(rawMsg, source, line, col) {
+    try {
+      count('jsErrors');
+      var cleanMsg = String(rawMsg || 'Unknown error').slice(0, 200);
+      var fileName = source ? String(source).split('/').pop().split('?')[0] : '';
+      var loc = fileName ? (' @ ' + fileName + (line ? ':' + line + (col ? ':' + col : '') : '')) : '';
+      var timeStr = '';
+      try { timeStr = new Date().toLocaleTimeString(); } catch (tErr) { timeStr = ''; }
+      var entry = (timeStr ? '[' + timeStr + '] ' : '') + cleanMsg + loc;
+
+      stats.lastError = cleanMsg;
+      if (!Array.isArray(stats.errorList)) stats.errorList = [];
+      stats.errorList.push(entry);
+      if (stats.errorList.length > 50) {
+        stats.errorList.shift();
+      }
+      saveStats();
+    } catch (err) {
+      /* evitar bucles si falla el registro */
+    }
+  }
+
   window.addEventListener('error', function (e) {
-    count('jsErrors');
-    var msg = (e && (e.message || (e.error && e.error.message))) || 'Unknown error';
+    var msg = (e && (e.message || (e.error && e.error.message))) || 'Script error.';
     recordJsError(msg, e && e.filename, e && e.lineno, e && e.colno);
-    stats.lastError = String(msg).slice(0, 200);
-    saveStats();
   });
 
   window.addEventListener('unhandledrejection', function (e) {
     var reason = e && e.reason;
-    var msg = (reason && (reason.message || reason.toString())) || 'Unhandled Promise rejection';
+    var msg = (reason && (reason.message || String(reason))) || 'Unhandled Promise rejection';
     recordJsError('Promise: ' + msg, '', '', '');
   });
 
@@ -194,7 +215,6 @@
     return document.scrollingElement || document.documentElement;
   }
 
-  // Sin modificador "i" dentro de selectores de atributo para evitar SyntaxError en Tizen 3.0
   function findNavButton(dir) {
     var selectors = dir > 0
       ? ['[data-e2e="feed-navigation-next"]', '[data-e2e="arrow-down"]', 'button[aria-label*="Next"]', 'button[aria-label*="next"]']
@@ -314,7 +334,7 @@
     document.body.appendChild(statsEl);
     count('statsViewed');
   }
-  
+
   var jsErrorsEl;
   function toggleJSErrors() {
     if (jsErrorsEl) {
@@ -339,7 +359,6 @@
     document.body.appendChild(jsErrorsEl);
     count('jsErrorsViewed');
   }
-
 
   var ACTIONS = {};
   ACTIONS[KEY.DOWN] = ['next', function () { navigate(1); }];
