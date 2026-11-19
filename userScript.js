@@ -10,11 +10,11 @@
     BACK: 10009, ESC: 27,
     PLAYPAUSE: 10252, PLAY: 415, PAUSE: 19,
     NEXT: 10233, PREV: 10232, FF: 417, REW: 412,
-    RED: 403
+    RED: 403, GREEN: 404
   };
   var SEEK_SECONDS = 5;
 
-  var STATS_KEY = 'tttv.stats';
+  var STATS_KEY = 'tttv.stats2';
   var stats = loadStats();
   stats.launches = (stats.launches || 0) + 1;
   stats.lastLaunch = new Date().toISOString();
@@ -65,8 +65,15 @@
   window.addEventListener('error', function (e) {
     count('jsErrors');
     var msg = (e && (e.message || (e.error && e.error.message))) || 'Unknown error';
+    recordJsError(msg, e && e.filename, e && e.lineno, e && e.colno);
     stats.lastError = String(msg).slice(0, 200);
     saveStats();
+  });
+
+  window.addEventListener('unhandledrejection', function (e) {
+    var reason = e && e.reason;
+    var msg = (reason && (reason.message || reason.toString())) || 'Unhandled Promise rejection';
+    recordJsError('Promise: ' + msg, '', '', '');
   });
 
   var toastEl, toastTimer;
@@ -303,10 +310,36 @@
     statsEl = document.createElement('pre');
     statsEl.style.cssText = 'position:fixed;top:5%;right:3%;max-width:40%;background:rgba(0,0,0,.85);' +
       'color:#0f0;font:20px/1.4 monospace;padding:20px;border-radius:12px;z-index:2147483647;white-space:pre-wrap';
-    statsEl.textContent = 'TikTok TV ' + VERSION + ' stats\n' + JSON.stringify(stats, null, 2);
+    statsEl.textContent = 'Tizen TV ' + VERSION + ' stats\n' + JSON.stringify(stats, null, 2);
     document.body.appendChild(statsEl);
     count('statsViewed');
   }
+  
+  var jsErrorsEl;
+  function toggleJSErrors() {
+    if (jsErrorsEl) {
+      if (jsErrorsEl.remove) jsErrorsEl.remove();
+      else if (jsErrorsEl.parentNode) jsErrorsEl.parentNode.removeChild(jsErrorsEl);
+      jsErrorsEl = null;
+      return;
+    }
+    if (!document.body) return;
+
+    var list = Array.isArray(stats.errorList) ? stats.errorList : [];
+    var header = 'Tizen TV ' + VERSION + ' JS Errors (' + (stats.jsErrors || 0) + ')\n';
+    var bodyText = list.length > 0
+      ? list.map(function (item, idx) { return (idx + 1) + '. ' + item; }).join('\n')
+      : 'Sin errores JS registrados.';
+
+    jsErrorsEl = document.createElement('pre');
+    jsErrorsEl.style.cssText = 'position:fixed;top:5%;left:3%;max-width:44%;max-height:85%;overflow:auto;' +
+      'background:rgba(20,0,0,.9);color:#ff6b6b;font:18px/1.4 monospace;padding:20px;' +
+      'border:1px solid #ff6b6b;border-radius:12px;z-index:2147483647;white-space:pre-wrap';
+    jsErrorsEl.textContent = header + '\n' + bodyText;
+    document.body.appendChild(jsErrorsEl);
+    count('jsErrorsViewed');
+  }
+
 
   var ACTIONS = {};
   ACTIONS[KEY.DOWN] = ['next', function () { navigate(1); }];
@@ -324,6 +357,7 @@
   ACTIONS[KEY.BACK] = ['back', goBack];
   ACTIONS[KEY.ESC] = ['back', goBack];
   ACTIONS[KEY.RED] = ['stats', toggleStats];
+  ACTIONS[KEY.GREEN] = ['jsErrors', toggleJSErrors];
 
   document.addEventListener('keydown', function (e) {
     if (sendingEscape) return;

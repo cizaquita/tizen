@@ -14,7 +14,8 @@
     "MediaTrackPrevious",
     "MediaFastForward",
     "MediaRewind",
-    "ColorF0Red"
+    "ColorF0Red",
+    "ColorF1Green"
   ],
   "author": "Shazamzafar - Mod by: Cizaquita",
   "license": "MIT"
