@@ -1,15 +1,10 @@
-/* TikTok TV - TizenBrew mod for https://www.tiktok.com
- * Remote: Up/Down = prev/next video, OK = play/pause (and unmute),
- *         Left/Right = seek 5s, Back = close popup / exit, Red = stats overlay.
- * Telemetry: counters persist in localStorage under "tttv.stats" and every
- * action logs to the console with the [TikTokTV] prefix.
- */
+/* Tizen TV - TizenBrew mod for https://www.tiktok.com (Tizen 3.0 compatible patch) */
 (function () {
   'use strict';
   if (window.__tttvLoaded) return;
   window.__tttvLoaded = true;
 
-  var VERSION = '0.1.1';
+  var VERSION = '0.1.1-tizen3';
   var KEY = {
     UP: 38, DOWN: 40, LEFT: 37, RIGHT: 39, OK: 13,
     BACK: 10009, ESC: 27,
@@ -19,7 +14,6 @@
   };
   var SEEK_SECONDS = 5;
 
-  // ---------- telemetry ----------
   var STATS_KEY = 'tttv.stats';
   var stats = loadStats();
   stats.launches = (stats.launches || 0) + 1;
@@ -40,15 +34,41 @@
   function log() {
     var args = Array.prototype.slice.call(arguments);
     args.unshift('[TikTokTV]');
-    console.log.apply(console, args);
+    if (typeof console !== 'undefined' && console.log) {
+      console.log.apply(console, args);
+    }
   }
+
+  // Selector seguro para motores antiguos de Tizen 3.0 (evita SyntaxError por selectores no soportados)
+  function safeQuery(selector, root) {
+    if (!selector || typeof selector !== 'string') return null;
+    try {
+      return (root || document).querySelector(selector);
+    } catch (err) {
+      count('selectorErrors');
+      stats.lastSelectorError = String(err && err.message || err).slice(0, 160);
+      saveStats();
+      return null;
+    }
+  }
+
+  function safeQueryAll(selector, root) {
+    if (!selector || typeof selector !== 'string') return [];
+    try {
+      return (root || document).querySelectorAll(selector);
+    } catch (err) {
+      count('selectorErrors');
+      return [];
+    }
+  }
+
   window.addEventListener('error', function (e) {
     count('jsErrors');
-    stats.lastError = String(e.message).slice(0, 200);
+    var msg = (e && (e.message || (e.error && e.error.message))) || 'Unknown error';
+    stats.lastError = String(msg).slice(0, 200);
     saveStats();
   });
 
-  // ---------- toast ----------
   var toastEl, toastTimer;
   function toast(text, ms) {
     if (!document.body) return;
@@ -65,38 +85,40 @@
     toastTimer = setTimeout(function () { toastEl.style.opacity = '0'; }, ms || 1200);
   }
 
-  // ---------- clutter ----------
   var css = [
-    // "Get the app" banners and prompts
     '[data-e2e="download-app"]', '[data-e2e="top-get-app"]', '[class*="DownloadApp"]',
     '[class*="BottomBanner"]', '[class*="GetAppButton"]', '[class*="PromotionBanner"]'
   ].join(',') + '{display:none!important}' +
     'html,body{cursor:none!important}';
+
   function injectCss() {
-    if (document.getElementById('tttv-css') || !document.head) return;
-    var s = document.createElement('style');
-    s.id = 'tttv-css';
-    s.textContent = css;
-    document.head.appendChild(s);
+    if (!document.head || safeQuery('#tttv-css')) return;
+    try {
+      var s = document.createElement('style');
+      s.id = 'tttv-css';
+      s.textContent = css;
+      document.head.appendChild(s);
+    } catch (e) { /* ignore css error on older engine */ }
   }
 
-  // Only exact, known-safe targets. Generic "close" guesses opened TikTok's sign-up flow in testing.
   function byText(selector, re, root) {
-    var els = (root || document).querySelectorAll(selector);
+    var els = safeQueryAll(selector, root);
     for (var i = 0; i < els.length; i++) {
-      if (els[i].offsetParent !== null && re.test(els[i].textContent.trim())) return els[i];
+      if (els[i].offsetParent !== null && re.test((els[i].textContent || '').trim())) return els[i];
     }
     return null;
   }
+
   function loginModal() {
-    var m = document.querySelector('[data-e2e="login-modal"]');
+    var m = safeQuery('[data-e2e="login-modal"]');
     return m && m.offsetParent !== null ? m : null;
   }
+
   function closeToasts() {
-    var t = document.querySelector('button[aria-label="Close toast"]');
+    var t = safeQuery('button[aria-label="Close toast"]');
     if (t && t.offsetParent !== null) { t.click(); count('toastsClosed'); }
   }
-  // Login popup: switch it to the QR-code option once so the user can log in from their phone.
+
   var qrShownFor = null;
   function handleLoginModal() {
     var m = loginModal();
@@ -110,11 +132,12 @@
       toast('Scan the QR code with the TikTok app on your phone · Back = skip', 8000);
     }
   }
+
   var sendingEscape = false;
   function closePopup() {
     var m = loginModal();
     if (!m) return false;
-    var container = m.closest('[class*="Modal"]') || m.parentElement.parentElement || document;
+    var container = (m.closest && m.closest('[class*="Modal"]')) || (m.parentElement && m.parentElement.parentElement) || document;
     var skip = byText('[role="button"], button, div', /^skip$/i, container);
     if (skip) {
       skip.click();
@@ -122,7 +145,9 @@
       log('login popup: skipped');
     } else {
       sendingEscape = true;
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', keyCode: 27, bubbles: true }));
+      try {
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', keyCode: 27, bubbles: true }));
+      } catch (e) { /* fallback */ }
       sendingEscape = false;
       count('loginEscape');
       log('login popup: no skip button, sent Escape');
@@ -130,15 +155,15 @@
     return true;
   }
 
-  // ---------- video helpers ----------
   function visibleArea(el) {
     var r = el.getBoundingClientRect();
     var w = Math.max(0, Math.min(r.right, innerWidth) - Math.max(r.left, 0));
     var h = Math.max(0, Math.min(r.bottom, innerHeight) - Math.max(r.top, 0));
     return w * h;
   }
+
   function currentVideo() {
-    var vids = document.querySelectorAll('video');
+    var vids = safeQueryAll('video');
     var best = null, bestArea = 0;
     for (var i = 0; i < vids.length; i++) {
       var a = visibleArea(vids[i]);
@@ -146,40 +171,53 @@
     }
     return best;
   }
+
   function videoId(v) {
     if (!v) return null;
-    var item = v.closest('article, [data-e2e="recommend-list-item-container"]');
+    var item = v.closest ? v.closest('article, [data-e2e="recommend-list-item-container"]') : null;
     return (item && (item.id || item.getAttribute('data-scroll-index'))) || v.currentSrc || v.src || null;
   }
+
   function scrollableAncestor(el) {
     while (el && el !== document.body) {
       var st = getComputedStyle(el);
-      // TikTok's feed column is overflow:hidden but still scrolls programmatically.
       if (/(auto|scroll|hidden)/.test(st.overflowY) && el.scrollHeight > el.clientHeight * 1.5) return el;
       el = el.parentElement;
     }
     return document.scrollingElement || document.documentElement;
   }
 
-  // Try each method in order until the visible video changes; record which one worked
-  // so a TikTok layout change shows up in the stats instead of silently breaking.
+  // Sin modificador "i" dentro de selectores de atributo para evitar SyntaxError en Tizen 3.0
+  function findNavButton(dir) {
+    var selectors = dir > 0
+      ? ['[data-e2e="feed-navigation-next"]', '[data-e2e="arrow-down"]', 'button[aria-label*="Next"]', 'button[aria-label*="next"]']
+      : ['[data-e2e="feed-navigation-prev"]', '[data-e2e="arrow-up"]', 'button[aria-label*="Previous"]', 'button[aria-label*="previous"]'];
+    for (var i = 0; i < selectors.length; i++) {
+      var el = safeQuery(selectors[i]);
+      if (el) return el;
+    }
+    return null;
+  }
+
   var NAV_METHODS = {
     button: function (dir) {
-      var sel = dir > 0
-        ? '[data-e2e="feed-navigation-next"], [data-e2e="arrow-down"], button[aria-label*="next video" i]'
-        : '[data-e2e="feed-navigation-prev"], [data-e2e="arrow-up"], button[aria-label*="previous video" i]';
-      var b = document.querySelector(sel);
-      if (!b || b.disabled) return false; // disabled while TikTok's login popup is up
+      var b = findNavButton(dir);
+      if (!b || b.disabled) return false;
       b.click();
       return true;
     },
     scroll: function (dir) {
       var v = currentVideo();
       var box = scrollableAncestor(v || document.body);
-      box.scrollBy({ top: dir * box.clientHeight, behavior: 'smooth' });
+      if (typeof box.scrollBy === 'function') {
+        box.scrollBy({ top: dir * box.clientHeight, behavior: 'smooth' });
+      } else {
+        box.scrollTop += dir * box.clientHeight;
+      }
       return true;
     }
   };
+
   var navBusy = false;
   function navigate(dir) {
     if (navBusy) return;
@@ -203,7 +241,10 @@
           count('nav.' + name);
           log('nav', dir > 0 ? 'next' : 'prev', 'via', name, (Date.now() - start) + 'ms');
           var v = currentVideo();
-          if (v && v.paused) v.play().catch(function () {});
+          if (v && v.paused && v.play) {
+            var p = v.play();
+            if (p && p.catch) p.catch(function () { });
+          }
           navBusy = false;
         } else {
           attempt(i + 1);
@@ -216,9 +257,18 @@
     var v = currentVideo();
     if (!v) { toast('No video'); count('noVideo'); return; }
     if (v.muted) { v.muted = false; count('unmuted'); }
-    if (v.paused) { v.play().catch(function () {}); toast('▶ Play'); }
-    else { v.pause(); toast('❚❚ Pause'); }
+    if (v.paused) {
+      if (v.play) {
+        var p = v.play();
+        if (p && p.catch) p.catch(function () { });
+      }
+      toast('▶ Play');
+    } else {
+      if (v.pause) v.pause();
+      toast('❚❚ Pause');
+    }
   }
+
   function seek(sec) {
     var v = currentVideo();
     if (!v || !isFinite(v.duration)) return;
@@ -233,7 +283,9 @@
       return;
     }
     try {
-      tizen.application.getCurrentApplication().exit();
+      if (typeof tizen !== 'undefined' && tizen.application) {
+        tizen.application.getCurrentApplication().exit();
+      }
     } catch (e) {
       log('exit not available outside the TV');
     }
@@ -241,7 +293,13 @@
 
   var statsEl;
   function toggleStats() {
-    if (statsEl) { statsEl.remove(); statsEl = null; return; }
+    if (statsEl) {
+      if (statsEl.remove) statsEl.remove();
+      else if (statsEl.parentNode) statsEl.parentNode.removeChild(statsEl);
+      statsEl = null;
+      return;
+    }
+    if (!document.body) return;
     statsEl = document.createElement('pre');
     statsEl.style.cssText = 'position:fixed;top:5%;right:3%;max-width:40%;background:rgba(0,0,0,.85);' +
       'color:#0f0;font:20px/1.4 monospace;padding:20px;border-radius:12px;z-index:2147483647;white-space:pre-wrap';
@@ -250,7 +308,6 @@
     count('statsViewed');
   }
 
-  // ---------- keys ----------
   var ACTIONS = {};
   ACTIONS[KEY.DOWN] = ['next', function () { navigate(1); }];
   ACTIONS[KEY.NEXT] = ['next', function () { navigate(1); }];
@@ -269,20 +326,18 @@
   ACTIONS[KEY.RED] = ['stats', toggleStats];
 
   document.addEventListener('keydown', function (e) {
-    if (sendingEscape) return; // our own Escape is meant for TikTok's popup
+    if (sendingEscape) return;
     var t = e.target;
-    // Let typing and the login popup get the keys, except Back which should still close things.
     var typing = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
     if ((typing || loginModal()) && e.keyCode !== KEY.BACK) { count('key.passedToPopup'); return; }
     var action = ACTIONS[e.keyCode];
     if (!action) { count('key.unmapped'); return; }
-    e.preventDefault();
-    e.stopImmediatePropagation();
+    if (e.preventDefault) e.preventDefault();
+    if (e.stopImmediatePropagation) e.stopImmediatePropagation();
     count('key.' + action[0]);
     action[1]();
   }, true);
 
-  // ---------- start ----------
   function init() {
     injectCss();
     closeToasts();
@@ -290,8 +345,8 @@
     log('loaded v' + VERSION, 'launch #' + stats.launches);
     toast('TikTok TV ready  ·  ▲▼ swipe  ·  OK play/pause', 4000);
   }
+
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
-  // TikTok is a single-page app that re-renders; keep CSS present and handle popups as they appear.
   setInterval(function () { injectCss(); closeToasts(); handleLoginModal(); }, 2000);
 })();
