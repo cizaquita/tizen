@@ -1,10 +1,10 @@
 {
   "name": "tizen3-1",
   "appName": "Tizen3 TV",
-  "version": "0.1.1.2",
+  "version": "0.1.1.3",
   "description": "- Website as a remote-friendly TV app for Samsung Tizen TVs (TizenBrew module).",
   "packageType": "mods",
-  "websiteURL": "https://www.tiktok.com/foryou",
+  "websiteURL": "https://m.tiktok.com",
   "main": "userScript.js",
   "keys": [
     "MediaPlayPause",
