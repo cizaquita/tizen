@@ -4,13 +4,13 @@
   if (window.__tttvLoaded) return;
   window.__tttvLoaded = true;
 
-  var VERSION = '0.1.3.1-tizen3';
+  var VERSION = '0.1.3.2-tizen3';
   var KEY = {
     UP: 38, DOWN: 40, LEFT: 37, RIGHT: 39, OK: 13,
     BACK: 10009, ESC: 27,
     PLAYPAUSE: 10252, PLAY: 415, PAUSE: 19,
     NEXT: 10233, PREV: 10232, FF: 417, REW: 412,
-    RED: 403, GREEN: 404
+    RED: 403, GREEN: 404, YELLOW: 405
   };
   var SEEK_SECONDS = 5;
 
@@ -85,6 +85,35 @@
       saveStats();
     } catch (err) {
       /* evitar bucles si falla el registro */
+    }
+  }
+
+  if (typeof console !== 'undefined') {
+    var origError = console.error;
+    var origWarn = console.warn;
+
+    if (typeof origError === 'function') {
+      console.error = function () {
+        try {
+          var parts = Array.prototype.slice.call(arguments).map(function (arg) {
+            return (arg && arg.message) ? arg.message : String(arg);
+          });
+          recordJsError('console.error: ' + parts.join(' '), '', '', '');
+        } catch (e) { /* ignore */ }
+        return origError.apply(console, arguments);
+      };
+    }
+
+    if (typeof origWarn === 'function') {
+      console.warn = function () {
+        try {
+          var parts = Array.prototype.slice.call(arguments).map(function (arg) {
+            return (arg && arg.message) ? arg.message : String(arg);
+          });
+          recordJsError('console.warn: ' + parts.join(' '), '', '', '');
+        } catch (e) { /* ignore */ }
+        return origWarn.apply(console, arguments);
+      };
     }
   }
 
@@ -362,6 +391,39 @@
     count('jsErrorsViewed');
   }
 
+  var overlayEl;
+  function toggleOverlay() {
+    if (overlayEl) {
+      if (overlayEl.remove) overlayEl.remove();
+      else if (overlayEl.parentNode) overlayEl.parentNode.removeChild(overlayEl);
+      overlayEl = null;
+      return;
+    }
+    if (!document.body) return;
+
+    var bodyLen = 0;
+    try { bodyLen = (document.body.innerHTML || '').length; } catch (e) { bodyLen = -1; }
+    var vidCount = safeQueryAll('video').length;
+    var info = {
+      version: VERSION,
+      url: location.href,
+      readyState: document.readyState,
+      bodyHtmlLength: bodyLen,
+      videosFound: vidCount,
+      jsErrors: stats.jsErrors || 0,
+      lastError: stats.lastError || null,
+      userAgent: navigator.userAgent
+    };
+
+    overlayEl = document.createElement('pre');
+    overlayEl.style.cssText = 'position:fixed;top:5%;left:50%;transform:translateX(-50%);max-width:85%;max-height:80%;overflow:auto;' +
+      'background:rgba(10,20,35,.92);color:#7dd3fc;font:18px/1.4 monospace;padding:20px;' +
+      'border:1px solid #38bdf8;border-radius:12px;z-index:2147483647;white-space:pre-wrap';
+    overlayEl.textContent = 'Tizen TV Overlay Info\n\n' + JSON.stringify(info, null, 2);
+    document.body.appendChild(overlayEl);
+    count('overlayViewed');
+  }
+
   var ACTIONS = {};
   ACTIONS[KEY.DOWN] = ['next', function () { navigate(1); }];
   ACTIONS[KEY.NEXT] = ['next', function () { navigate(1); }];
@@ -379,6 +441,7 @@
   ACTIONS[KEY.ESC] = ['back', goBack];
   ACTIONS[KEY.RED] = ['stats', toggleStats];
   ACTIONS[KEY.GREEN] = ['jsErrors', toggleJSErrors];
+  ACTIONS[KEY.YELLOW] = ['overlay', toggleOverlay];
 
   document.addEventListener('keydown', function (e) {
     if (sendingEscape) return;
