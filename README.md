@@ -1,4 +1,4 @@
-# TikTok TV (TizenBrew module)
+# Tizen TV (TizenBrew module)
 
 Opens Tizen website full-screen on a Samsung Tizen TV via [TizenBrew](https://github.com/reisxd/TizenBrew) and maps the remote:
 
